@@ -40,6 +40,11 @@ def delete_customer(request, customer_id):
             return JsonResponse({'error': str(e)}, status=500)
     return JsonResponse({'error': 'Method not allowed. Use DELETE.'}, status=405)
 
+def get_customer(request, customer_id):
+    if request.method == 'GET':
+        customers = Customer.objects.all().values('name','email','address','gstin')
+        return JsonResponse(list(customers), safe=False)
+
 @csrf_exempt
 def add_product(request):
     if request.method == 'POST':
@@ -76,6 +81,11 @@ def delete_product(request, product_id):
         except Exception as e:
             return JsonResponse({'error': str(e)}, status=500)
     return JsonResponse({'error': 'Method not allowed. Use DELETE.'}, status=405)
+
+def get_products(request):
+    if request.method == 'GET':
+        products = Product.objects.all().values('id','name','description','hsn_code','price','gst_rate')
+        return JsonResponse(list(products), safe=False)
 
 @csrf_exempt
 def create_invoice(request):
