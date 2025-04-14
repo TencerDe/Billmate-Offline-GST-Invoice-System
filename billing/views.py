@@ -40,10 +40,24 @@ def delete_customer(request, customer_id):
             return JsonResponse({'error': str(e)}, status=500)
     return JsonResponse({'error': 'Method not allowed. Use DELETE.'}, status=405)
 
+def get_customers(request):
+    customers = list(Customer.objects.values())
+    return JsonResponse(customers, safe=False)
+
 def get_customer(request, customer_id):
-    if request.method == 'GET':
-        customers = Customer.objects.all().values('name','email','address','gstin')
-        return JsonResponse(list(customers), safe=False)
+    try:
+        customer = Customer.objects.get(id=customer_id)
+        data = {
+            'id': customer.id,
+            'name': customer.name,
+            'email': customer.email,
+            'phone': customer.phone,
+            'address': customer.address,
+            'gstin': customer.gstin,
+        }
+        return JsonResponse(data)
+    except Customer.DoesNotExist:
+        return JsonResponse({'error': 'Customer not found'}, status=404)
 
 @csrf_exempt
 def add_product(request):
