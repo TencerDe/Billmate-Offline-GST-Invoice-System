@@ -1,7 +1,9 @@
-from django.http import JsonResponse, HttpResponseNotAllowed
+from django.http import JsonResponse, HttpResponse
 from django.views.decorators.csrf import csrf_exempt
 from .models import Customer, Product, Invoice, InvoiceItem
 import json
+from reportlab.pdfgen import canvas
+from io import BytesIO
 
 @csrf_exempt
 def add_customer(request):
@@ -157,3 +159,86 @@ def create_invoice(request):
             return JsonResponse({'error': str(e)}, status=500)
 
     return JsonResponse({'error': 'Method not allowed. Use POST.'}, status=405)
+
+@csrf_exempt
+def get_all_invoices(request):
+    if request.method == 'GET':
+        invoices = Invoice.objects.all().order_by('-created_at')
+        data = []
+
+        for invoices in invoices:
+            items = InvoiceItem.objects.filter(invoice=Invoice)
+            item_list = []
+
+            for item in items:
+                item_list.append({
+                    'product_name': item.product.name,
+                    'quantity': item.quantity,
+                    'rate': item.rate,
+                    'tax_percent': item.tax_percent,
+                    'total': item.total,
+                })
+
+            data.append({
+                'invoice_id': Invoice.id,
+                'invoice_number': Invoice.invoice_number,
+                'customer_name': Invoice.customer.name,
+                'created_at': Invoice.created_at.strftime("%Y-%m-%d %H:%M:%S"),
+                'total_amount': Invoice.total_amount,
+                'total_tax': Invoice.total_tax,
+                'items': item_list
+            })
+
+        return JsonResponse({'invoices': data})
+
+def download_invoice(request, invoice_id):
+    try:
+        invoice = Invoice.objects.get(id=invoice_id)
+        items = InvoiceItem.objects.filter(invoice=invoice)
+
+        buffer = BytesIO()
+        p = canvas.Canvas(buffer)
+
+        # Title
+        p.setFont("Helvetica-Bold", 16)
+        p.drawString(200, 800, f"Invoice #{invoice.invoice_number}")
+
+        # Customer Info
+        p.setFont("Helvetica", 12)
+        p.drawString(50, 770, f"Customer: {invoice.customer.name}")
+        p.drawString(50, 750, f"Phone: {invoice.customer.phone}")
+        p.drawString(50, 730, f"Email: {invoice.customer.email or 'N/A'}")
+        p.drawString(50, 710, f"Address: {invoice.customer.address}")
+
+        # Items Header
+        y = 680
+        p.drawString(50, y, "Product")
+        p.drawString(200, y, "Qty")
+        p.drawString(250, y, "Rate")
+        p.drawString(320, y, "Tax%")
+        p.drawString(390, y, "Total")
+
+        y -= 20
+
+        for item in items:
+            p.drawString(50, y, item.product.name)
+            p.drawString(200, y, str(item.quantity))
+            p.drawString(250, y, f"{item.rate:.2f}")
+            p.drawString(320, y, f"{item.tax_percent:.2f}")
+            p.drawString(390, y, f"{item.total:.2f}")
+            y -= 20
+
+        # Totals
+        p.drawString(50, y - 10, f"Total Tax: ₹{invoice.total_tax:.2f}")
+        p.drawString(50, y - 30, f"Total Amount: ₹{invoice.total_amount:.2f}")
+
+        # Finalize
+        p.showPage()
+        p.save()
+        buffer.seek(0)
+
+        return HttpResponse(buffer, content_type='application/pdf')
+
+    except Invoice.DoesNotExist:
+        return JsonResponse({'error': 'Invoice not found'}, status=404)
+
